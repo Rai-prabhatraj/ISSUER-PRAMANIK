@@ -1,6 +1,7 @@
 import * as Yup from 'yup';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios'; // For making API calls
 // form
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
@@ -40,10 +41,26 @@ export default function RegisterForm() {
   const {
     handleSubmit,
     formState: { isSubmitting },
+    reset,
   } = methods;
 
-  const onSubmit = async () => {
-    navigate('/dashboard', { replace: true });
+  const onSubmit = async (data) => {
+    try {
+      // Call the signup API
+      const response = await axios.post('http://localhost:5000/user/signup', {
+        name: `${data.firstName} ${data.lastName}`,
+        email: data.email,
+        password: data.password,
+      });
+
+      // On successful registration, navigate to the dashboard or show a success message
+      console.log('Signup successful:', response.data);
+      navigate('/dashboard', { replace: true });
+    } catch (error) {
+      console.error('Signup failed:', error.response?.data || error.message);
+    } finally {
+      reset();
+    }
   };
 
   return (

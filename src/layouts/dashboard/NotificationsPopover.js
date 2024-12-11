@@ -18,6 +18,10 @@ import {
   ListSubheader,
   ListItemAvatar,
   ListItemButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 // utils
 import { fToNow } from '../../utils/formatTime';
@@ -31,46 +35,46 @@ import MenuPopover from '../../components/MenuPopover';
 const NOTIFICATIONS = [
   {
     id: faker.datatype.uuid(),
-    title: 'Your order is placed',
-    description: 'waiting for shipping',
+    title: 'Document Authorization Pending',
+    description: 'Your document is awaiting approval from the issuing authority.',
     avatar: null,
-    type: 'order_placed',
+    type: 'doc_authorization',
     createdAt: set(new Date(), { hours: 10, minutes: 30 }),
     isUnRead: true,
   },
   {
     id: faker.datatype.uuid(),
-    title: faker.name.findName(),
-    description: 'answered to your comment on the pramanik',
+    title: 'New Comment on Document',
+    description: 'John Doe commented: "Please revise section 3.2 for accuracy."',
     avatar: '/static/mock-images/avatars/avatar_2.jpg',
-    type: 'friend_interactive',
+    type: 'doc_comment',
     createdAt: sub(new Date(), { hours: 3, minutes: 30 }),
     isUnRead: true,
   },
   {
     id: faker.datatype.uuid(),
-    title: 'You have new message',
-    description: '5 unread messages',
+    title: 'Document Revision Required',
+    description: 'A revision request has been issued for Document #4567.',
     avatar: null,
-    type: 'chat_message',
+    type: 'doc_revision',
     createdAt: sub(new Date(), { days: 1, hours: 3, minutes: 30 }),
     isUnRead: false,
   },
   {
     id: faker.datatype.uuid(),
-    title: 'You have new mail',
-    description: 'sent from Guido Padberg',
+    title: 'New Document Uploaded',
+    description: 'Document #7890 has been uploaded for review.',
     avatar: null,
-    type: 'mail',
+    type: 'doc_upload',
     createdAt: sub(new Date(), { days: 2, hours: 3, minutes: 30 }),
     isUnRead: false,
   },
   {
     id: faker.datatype.uuid(),
-    title: 'Delivery processing',
-    description: 'Your order is being shipped',
+    title: 'Document Approved',
+    description: 'Document #1234 has been approved by the issuing authority.',
     avatar: null,
-    type: 'order_shipped',
+    type: 'doc_approved',
     createdAt: sub(new Date(), { days: 3, hours: 3, minutes: 30 }),
     isUnRead: false,
   },
@@ -81,7 +85,9 @@ export default function NotificationsPopover() {
 
   const [notifications, setNotifications] = useState(NOTIFICATIONS);
 
-  const totalUnRead = notifications.filter((item) => item.isUnRead === true).length;
+  const [inboxOpen, setInboxOpen] = useState(false);
+
+  const totalUnRead = notifications.filter((item) => item.isUnRead).length;
 
   const [open, setOpen] = useState(null);
 
@@ -100,6 +106,15 @@ export default function NotificationsPopover() {
         isUnRead: false,
       }))
     );
+  };
+
+  const handleInboxOpen = () => {
+    setInboxOpen(true);
+    setOpen(null);
+  };
+
+  const handleInboxClose = () => {
+    setInboxOpen(false);
   };
 
   return (
@@ -130,7 +145,7 @@ export default function NotificationsPopover() {
           </Box>
 
           {totalUnRead > 0 && (
-            <Tooltip title=" Mark all as read">
+            <Tooltip title="Mark all as read">
               <IconButton color="primary" onClick={handleMarkAllAsRead}>
                 <Iconify icon="eva:done-all-fill" width={20} height={20} />
               </IconButton>
@@ -141,29 +156,13 @@ export default function NotificationsPopover() {
         <Divider sx={{ borderStyle: 'dashed' }} />
 
         <Scrollbar sx={{ height: { xs: 340, sm: 'auto' } }}>
-          <List
-            disablePadding
-            subheader={
-              <ListSubheader disableSticky sx={{ py: 1, px: 2.5, typography: 'overline' }}>
-                New
-              </ListSubheader>
-            }
-          >
-            {notifications.slice(0, 2).map((notification) => (
-              <NotificationItem key={notification.id} notification={notification} />
-            ))}
-          </List>
-
-          <List
-            disablePadding
-            subheader={
-              <ListSubheader disableSticky sx={{ py: 1, px: 2.5, typography: 'overline' }}>
-                Before that
-              </ListSubheader>
-            }
-          >
-            {notifications.slice(2, 5).map((notification) => (
-              <NotificationItem key={notification.id} notification={notification} />
+          <List disablePadding>
+            {notifications.map((notification) => (
+              <NotificationItem
+                key={notification.id}
+                notification={notification}
+                onClick={handleInboxOpen}
+              />
             ))}
           </List>
         </Scrollbar>
@@ -171,16 +170,30 @@ export default function NotificationsPopover() {
         <Divider sx={{ borderStyle: 'dashed' }} />
 
         <Box sx={{ p: 1 }}>
-          <Button fullWidth disableRipple>
+          <Button fullWidth disableRipple onClick={handleInboxOpen}>
             View All
           </Button>
         </Box>
       </MenuPopover>
+
+      <Dialog open={inboxOpen} onClose={handleInboxClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Inbox</DialogTitle>
+        <DialogContent>
+          <Scrollbar>
+            <List disablePadding>
+              {notifications.map((notification) => (
+                <NotificationItem key={notification.id} notification={notification} />
+              ))}
+            </List>
+          </Scrollbar>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleInboxClose}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }
-
-// ----------------------------------------------------------------------
 
 NotificationItem.propTypes = {
   notification: PropTypes.shape({
@@ -192,13 +205,15 @@ NotificationItem.propTypes = {
     type: PropTypes.string,
     avatar: PropTypes.any,
   }),
+  onClick: PropTypes.func,
 };
 
-function NotificationItem({ notification }) {
+function NotificationItem({ notification, onClick }) {
   const { avatar, title } = renderContent(notification);
 
   return (
     <ListItemButton
+      onClick={onClick}
       sx={{
         py: 1.5,
         px: 2.5,
@@ -232,8 +247,6 @@ function NotificationItem({ notification }) {
   );
 }
 
-// ----------------------------------------------------------------------
-
 function renderContent(notification) {
   const title = (
     <Typography variant="subtitle2">
@@ -244,32 +257,10 @@ function renderContent(notification) {
     </Typography>
   );
 
-  if (notification.type === 'order_placed') {
-    return {
-      avatar: <img alt={notification.title} src="/static/icons/ic_notification_package.svg" />,
-      title,
-    };
-  }
-  if (notification.type === 'order_shipped') {
-    return {
-      avatar: <img alt={notification.title} src="/static/icons/ic_notification_shipping.svg" />,
-      title,
-    };
-  }
-  if (notification.type === 'mail') {
-    return {
-      avatar: <img alt={notification.title} src="/static/icons/ic_notification_mail.svg" />,
-      title,
-    };
-  }
-  if (notification.type === 'chat_message') {
-    return {
-      avatar: <img alt={notification.title} src="/static/icons/ic_notification_chat.svg" />,
-      title,
-    };
-  }
   return {
-    avatar: notification.avatar ? <img alt={notification.title} src={notification.avatar} /> : null,
+    avatar: notification.avatar ? (
+      <img alt={notification.title} src={notification.avatar} />
+    ) : null,
     title,
   };
 }

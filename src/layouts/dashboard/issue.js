@@ -14,11 +14,6 @@ import { ethers } from 'ethers';
 import axios from 'axios';
 import { contractAddress, contractABI } from './constants'
 
-
-
-
-
-
 function Issuer() {
     const [state, setState] = useState({
         provider: null,
@@ -176,30 +171,41 @@ function Issuer() {
         setSignature(res)
     }
 
-    const handlecheckValidity= async () => {
-        let signingAuthority = document.querySelector('#signer').value
+    const handlecheckValidity = async () => {
+        let signingAuthority = document.querySelector('#signer').value;
+    
+        // Remove surrounding quotes, if any
         if (signingAuthority[0] === '"') {
-            signingAuthority = signingAuthority.substring(
-                1,
-                signingAuthority.length - 1
-            )
+            signingAuthority = signingAuthority.substring(1, signingAuthority.length - 1);
         }
-        const msg = document.querySelector('#msg').value
-        const signature = document.querySelector('#signature').value
-        const valid = await state.contract.verify(
-            signingAuthority,
-            msg,
-            signature
-        )
-        console.log('signature is', valid)
-        document.querySelector('#valid').innerHTML = `<h1>${valid}</h1>`
-    }
+    
+        // Validate the signingAuthority as an Ethereum address
+        if (!ethers.utils.isAddress(signingAuthority)) {
+            console.error('Invalid Ethereum address:', signingAuthority);
+            document.querySelector('#valid').innerHTML = `<h1>Invalid Ethereum address</h1>`;
+            return;
+        }
+    
+        const msg = document.querySelector('#msg').value;
+        const signature = document.querySelector('#signature').value;
+    
+        try {
+            // Call the contract's verify method
+            const valid = await state.contract.verify(signingAuthority, msg, signature);
+    
+            console.log('Signature is', valid);
+            document.querySelector('#valid').innerHTML = `<h1>${valid ? 'Valid' : 'Invalid'}</h1>`;
+        } catch (error) {
+            console.error('Error verifying signature:', error);
+            document.querySelector('#valid').innerHTML = `<h1>Error verifying signature</h1>`;
+        }
+    };
+    
 
     const handlesaveData = async () => {
-        const receiver = receiverRef.current?.value; // Accessing value via ref
-        const message = messageRef.current?.value;   // Accessing value via ref
-
-        // Check if the fields are empty
+        const receiver = receiverRef.current?.value; 
+        const message = messageRef.current?.value;   
+    
         if (!receiver || !message) {
             toast.error('Receiver and message are required!', {
                 position: "top-right",
@@ -213,13 +219,12 @@ function Issuer() {
             });
             return;
         }
-
+    
         console.log(receiver, message, cid);
         console.log(signature);
         console.log(account);
-
-        console.log('sending transaction...');
-
+    
+        // Notify the user about the blockchain transaction
         toast.info('Transaction submitted to the blockchain!', {
             position: "top-right",
             autoClose: 5000,
@@ -230,8 +235,9 @@ function Issuer() {
             progress: undefined,
             theme: "light",
         });
-
+    
         try {
+            // Send data to the blockchain
             const saved = await state.contract.storeSignature(
                 account,
                 receiver,
@@ -240,6 +246,8 @@ function Issuer() {
                 message
             );
             await saved.wait();
+    
+            // Notify user of success
             toast.success('Data successfully stored in blockchain! Check the data section', {
                 position: "top-right",
                 autoClose: 5000,
@@ -250,10 +258,48 @@ function Issuer() {
                 progress: undefined,
                 theme: "light",
             });
+    
             console.log('saveData ', saved);
+    
+            // POST data to the database
+            console.log('Saving data to the database...');
+            const response = await fetch("http://localhost:5000/issuer/saveData", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    account,
+                    receiver,
+                    cid: cid.toString(),
+                    signature,
+                    message,
+                }),
+            });
+    
+            if (!response.ok) {
+                throw new Error("Failed to save data to the database");
+            }
+    
+            const result = await response.json();
+            console.log('Data saved to the database:', result);
+    
+            // Notify user of database success
+            toast.success('Data successfully stored in database!', {
+                position: "top-right",
+                autoClose: 5000,
+                hideProgressBar: false,
+                closeOnClick: true,
+                pauseOnHover: true,
+                draggable: true,
+                progress: undefined,
+                theme: "light",
+            });
         } catch (error) {
             console.log('Error saving data:', error);
-            toast.error('Transaction failed!', {
+    
+            // Notify user of failure
+            toast.error('Transaction or database operation failed!', {
                 position: "top-right",
                 autoClose: 5000,
                 hideProgressBar: false,
@@ -265,6 +311,7 @@ function Issuer() {
             });
         }
     };
+    
 
     const handlesetSenderData = async () => {
         console.log('setsenderData is called...!!')
@@ -326,26 +373,8 @@ function Issuer() {
 
             {connected ? (
                 <Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
-                        {/* <FormControl sx={{ m: 2, minWidth: 120 }}>
-                            <InputLabel>Page</InputLabel>
-                            <Select
-                                value={page}
-                                onChange={(e) => {
-                                    const selectedPage = e.target.value;
-                                    setPage(selectedPage);
-                                    if (selectedPage === 'data') {
-                                        handlesetSenderData();
-                                        handlesetReceiverData();
-                                    }
-                                }}
-                            >
-                                <MenuItem value="sign">Issue Document</MenuItem>
-                                <MenuItem value="verify">Verify Document</MenuItem>
-                                <MenuItem value="data">Data</MenuItem>
-                            </Select>
-                        </FormControl> */}
-                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-start' }} />
+                    
 
                     {page === 'sign' && (
                         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', bgcolor: 'gray.50' }}>
@@ -408,7 +437,7 @@ function Issuer() {
                                 {/* Step 3: Enter Details */}
                                 <Box sx={{ mb: 3 }}>
                                     <Typography variant="subtitle1" sx={{ mb: 1 }}>Enter Receiver and Certificate Details</Typography>
-                                    <TextField
+                                    <input
     label="Receiver Address"
     variant="outlined"
     id="receiver"
@@ -417,7 +446,7 @@ function Issuer() {
     fullWidth
     margin="normal"
 />
-<TextField
+<input
     label="Message"
     variant="outlined"
     id="message"

@@ -12,12 +12,12 @@ const navConfig = [
     icon: getIcon('eva:pie-chart-2-fill'),
   },
   {
-    title: 'user',
+    title: 'Applications',
     path: '/dashboard/user',
     icon: getIcon('eva:people-fill'),
   },
   {
-    title: 'applications',
+    title: 'Documents',
     path: '/dashboard/application',
     icon: getIcon('eva:shopping-bag-fill'),
   },
@@ -37,13 +37,13 @@ const navConfig = [
     icon: getIcon('eva:layout-fill'),
   },{
     title: 'Verify Documents',
-    path: '/404',
+    path: '/dashboard/verifydoc',
     icon: getIcon('eva:checkmark-circle-2-fill'),
   },{
     title: 'Generate Doclink',
     path: '/dashboard/Generatelink',
     icon: getIcon('eva:link-fill'),
-  }
+  },
 
 
 
@@ -51,16 +51,16 @@ const navConfig = [
 
 
 
-  // {
-  //   title: 'register',
-  //   path: '/register',
-  //   icon: getIcon('eva:person-add-fill'),
-  // },
-  // {
-  //   title: 'register',
-  //   path: '/register',
-  //   icon: getIcon('eva:person-add-fill'),
-  // },
+  {
+    title: 'SignIn',
+    path: '/login',
+    icon: getIcon('eva:person-add-fill'),
+  },
+  {
+    title: 'Signup',
+    path: '/register',
+    icon: getIcon('eva:person-add-fill'),
+  },
   // {
   //   title: 'Not found',
   //   path: '/404',
