@@ -1,151 +1,256 @@
-import React, { useState, useRef } from "react";
-import { Box, Button, Typography, Grid, Card, CardContent } from "@mui/material";
-import { Viewer } from "@react-pdf-viewer/core"; // Updated import
-import "@react-pdf-viewer/core/lib/styles/index.css";
-import "@react-pdf-viewer/default-layout/lib/styles/index.css";
-import { PDFDocument } from "pdf-lib";
+import React, { useState } from 'react';
+import { Button, Typography, Box, Modal } from '@mui/material';
+import { jsPDF } from 'jspdf';
+import * as XLSX from 'xlsx';
+import axios from 'axios';
 
+function GeneratePdfPage() {
+  const [excelData, setExcelData] = useState([]);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [previewPdfUrl, setPreviewPdfUrl] = useState(null);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
 
-
-
-// Sample templates (modify to load from DB if necessary)
-const templates = [
-  { id: 1, name: "Template 1", content: "Sample.pdf" },
-  { id: 2, name: "Template 2", content: "AnotherSample.pdf" },
-];
-
-const TemplatePage = () => {
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
-  const [pdfFile, setPdfFile] = useState(null); // PDF file data
-  const [updatedPdf, setUpdatedPdf] = useState(null); // Edited PDF data
-
-  const fileInputRef = useRef(null);
-
-  const loadTemplatePdf = async (template) => {
-    try {
-      const response = await fetch(`/path-to-your-pdf/${template.content}`);
-      const arrayBuffer = await response.arrayBuffer();
-      setPdfFile(arrayBuffer);
-      setSelectedTemplate(template);
-    } catch (error) {
-      console.error("Error loading PDF:", error);
-    }
-  };
-
-  const handlePdfChange = async (event) => {
+  // Handle file upload
+  const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (file) {
-      const arrayBuffer = await file.arrayBuffer();
-      setPdfFile(arrayBuffer);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+
+        // Get the first sheet and convert it to JSON
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        let jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        // Clean the keys in the JSON data
+        jsonData = jsonData.map((row) =>
+          Object.keys(row).reduce((acc, key) => {
+            const cleanedKey = key.trim().replace(/\s+/g, ' '); // Remove extra spaces
+            acc[cleanedKey] = row[key];
+            return acc;
+          }, {})
+        );
+
+        setExcelData(jsonData);
+      };
+      reader.readAsArrayBuffer(file);
     }
   };
 
-  const saveEditedPdf = async () => {
-    try {
-      const pdfDoc = await PDFDocument.load(pdfFile);
-      const pages = pdfDoc.getPages();
-      const firstPage = pages[0];
+  // Generate PDF and preview it
+  const handleReviewPdf = () => {
+    if (excelData.length === 0) {
+      alert('No data to review!');
+      return;
+    }
 
-      // Example of editing the PDF (Adding text)
-      firstPage.drawText("Edited Text Example", {
-        x: 50,
-        y: 700,
-        size: 20,
-        color: pdfDoc.embedRgb(0.95, 0.1, 0.1),
+    const doc = new jsPDF();
+    excelData.forEach((item, index) => {
+      // Add content for each item
+      doc.setFontSize(20);
+      doc.text('TCS Application Details', 10, 10);
+
+      doc.setFontSize(10);
+      const content = `
+        Timestamp: ${item.Timestamp || ''}
+        ERP ID: ${item['ERP ID'] || ''}
+        Email ID: ${item['Email ID'] || ''}
+        Name: ${item['Name'] || ''}
+        Application Status: ${item['Application Status'] || ''}
+        Institute Name: ${item['Institute Name'] || ''}
+        Highest Qualification: ${item['Highest Qualification'] || ''}
+        Specialisation: ${item.Specialisation || ''}
+        Skills: ${item.Skills || ''}
+        Eligible as per TCS Criteria: ${item['Eligible as per the TCS Eligibility Criteria'] || ''}
+        Test State Preference 1: ${item['Test State Preference 1'] || ''}
+        Test City Preference 1: ${item['Test City Preference 1'] || ''}
+      `;
+
+      doc.text(content, 10, 20);
+
+      // Add a new page if not the last item
+      if (index < excelData.length - 1) {
+        doc.addPage();
+      }
+    });
+
+    // Convert the PDF to a Blob and create a preview URL
+    const pdfBlob = doc.output('blob');
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+    setPreviewPdfUrl(pdfUrl);
+    setIsReviewModalOpen(true);
+  };
+
+  // Generate and upload PDF
+  const generateAndUploadPdf = async () => {
+    if (excelData.length === 0) {
+      alert('No data to publish!');
+      return;
+    }
+
+    setIsPublishing(true);
+
+    const doc = new jsPDF();
+
+    excelData.forEach((item, index) => {
+      // Add content for each item
+      doc.setFontSize(20);
+      doc.text('TCS Application Details', 10, 10);
+
+      doc.setFontSize(10);
+      const content = `
+        Timestamp: ${item.Timestamp || ''}
+        ERP ID: ${item['ERP ID'] || ''}
+        Email ID: ${item['Email ID'] || ''}
+        Name: ${item['Name'] || ''}
+        Application Status: ${item['Application Status'] || ''}
+        Institute Name: ${item['Institute Name'] || ''}
+        Highest Qualification: ${item['Highest Qualification'] || ''}
+        Specialisation: ${item.Specialisation || ''}
+        Skills: ${item.Skills || ''}
+        Eligible as per TCS Criteria: ${item['Eligible as per the TCS Eligibility Criteria'] || ''}
+        Test State Preference 1: ${item['Test State Preference 1'] || ''}
+        Test City Preference 1: ${item['Test City Preference 1'] || ''}
+      `;
+
+      doc.text(content, 10, 20);
+
+      // Add a new page if not the last item
+      if (index < excelData.length - 1) {
+        doc.addPage();
+      }
+    });
+
+    // Convert the PDF to a Blob
+    const pdfBlob = doc.output('blob');
+
+    // Upload to Pinata
+    try {
+      const formData = new FormData();
+      formData.append('file', pdfBlob, 'applications.pdf');
+
+      const response = await axios.post('https://api.pinata.cloud/pinning/pinFileToIPFS', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          pinata_api_key: 'cc2e560077cf5de826f0',
+          pinata_secret_api_key: '8d8c5864dea3229f5687b88407027a9a2a115073688a630e9be92ed8f7b70946',
+        },
       });
 
-      const editedPdfBytes = await pdfDoc.save();
-      setUpdatedPdf(editedPdfBytes);
-
-      // Save to database (replace this with your API call)
-      console.log("Edited PDF saved:", editedPdfBytes);
-      alert("Edited PDF saved!");
+      alert(`PDF successfully published to IPFS! CID: ${response.data.IpfsHash}`);
     } catch (error) {
-      console.error("Error editing PDF:", error);
+      console.error('Error uploading to Pinata:', error);
+      alert('Failed to publish PDF to IPFS.');
+    } finally {
+      setIsPublishing(false);
     }
   };
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5", py: 4 }}>
-      <Box sx={{ maxWidth: 1200, mx: "auto", px: 2 }}>
-        {!selectedTemplate ? (
-          <Box>
-            <Typography
-              variant="h4"
-              align="center"
-              sx={{ mb: 4, fontWeight: "bold", color: "#3f51b5" }}
-            >
-              Select or Create a Template
-            </Typography>
-            <Grid container spacing={3}>
-              {templates.map((template) => (
-                <Grid item xs={12} sm={6} md={4} key={template.id}>
-                  <Card
-                    sx={{
-                      p: 2,
-                      cursor: "pointer",
-                      transition: "0.3s",
-                      "&:hover": {
-                        transform: "scale(1.05)",
-                        boxShadow: "0px 8px 20px rgba(0,0,0,0.2)",
-                      },
-                    }}
-                    onClick={() => loadTemplatePdf(template)}
-                  >
-                    <CardContent>
-                      <Typography
-                        variant="h6"
-                        align="center"
-                        sx={{ fontWeight: "bold", color: "#3f51b5" }}
-                      >
-                        {template.name}
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
-            <Button
-              variant="contained"
-              color="secondary"
-              sx={{ mt: 4 }}
-              onClick={() => fileInputRef.current.click()}
-            >
-              Upload New Template
-            </Button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              style={{ display: "none" }}
-              accept="application/pdf"
-              onChange={handlePdfChange}
-            />
-          </Box>
-        ) : (
-          <Box>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={() => setSelectedTemplate(null)}
-              sx={{ mb: 3 }}
-            >
-              Back to Templates
-            </Button>
-            {pdfFile && <Viewer fileUrl={pdfFile} style={{ height: "600px", width: "100%" }} />}
+    <div style={{ padding: '20px' }}>
+      <Typography variant="h4" gutterBottom>
+        Generate Document and Publish
+      </Typography>
 
-            <Button
-              variant="contained"
-              color="success"
-              onClick={saveEditedPdf}
-              sx={{ mt: 3 }}
-            >
-              Save Edited Template
-            </Button>
-          </Box>
-        )}
+      <Box>
+        <input
+          type="file"
+          accept=".xlsx, .xls"
+          onChange={handleFileUpload}
+          style={{ marginBottom: '20px' }}
+        />
       </Box>
-    </Box>
-  );
-};
 
-export default TemplatePage;
+      {excelData.length > 0 && (
+        <div>
+          <Typography variant="h6" gutterBottom>
+            Uploaded Data:
+          </Typography>
+          <table border="1" cellPadding="5" style={{ width: '100%', marginBottom: '20px' }}>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Email</th>
+                <th>Name</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {excelData.map((item, index) => (
+                <tr key={index}>
+                  <td>{item.Timestamp}</td>
+                  <td>{item['Email ID']}</td>
+                  <td>{item['Name']}</td>
+                  <td>{item['Application Status']}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleReviewPdf}
+            style={{ marginRight: '10px' }}
+          >
+            Review Document
+          </Button>
+
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={generateAndUploadPdf}
+            disabled={isPublishing}
+          >
+            {isPublishing ? 'Publishing...' : 'Publish to IPFS'}
+          </Button>
+        </div>
+      )}
+
+      {/* Review Modal */}
+      <Modal
+        open={isReviewModalOpen}
+        onClose={() => setIsReviewModalOpen(false)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Box
+          style={{
+            backgroundColor: 'white',
+            padding: '20px',
+            maxWidth: '80%',
+            maxHeight: '80%',
+            overflow: 'auto',
+          }}
+        >
+          <Typography variant="h5" gutterBottom>
+            Document Preview
+          </Typography>
+          {previewPdfUrl && (
+            <iframe
+              src={previewPdfUrl}
+              title="PDF Preview"
+              width="100%"
+              height="400px"
+              style={{ border: 'none' }}
+            />
+          )}
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={() => setIsReviewModalOpen(false)}
+            style={{ marginTop: '10px' }}
+          >
+            Close
+          </Button>
+        </Box>
+      </Modal>
+    </div>
+  );
+}
+
+export default GeneratePdfPage;

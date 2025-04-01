@@ -14,14 +14,19 @@ import { ethers } from 'ethers';
 import axios from 'axios';
 import { contractAddress, contractABI } from './constants'
 
+let ipfsHashGlobal = '';
+let signglobal = '';
+
 function Issuer() {
     const [state, setState] = useState({
         provider: null,
         signer: null,
         contract: null,
     })
+    const [progress, setProgress] = useState([]);
     const [connected, setConnected] = useState(false)
-    const [cid, setCid] = useState('')
+    const [cid, setCid] = useState('');  // Make sure `cid` is initialized
+
     const [signature, setSignature] = useState('')
     const [page, setPage] = useState('sign')
     const [account, setAccount] = useState('')
@@ -35,6 +40,48 @@ function Issuer() {
     const fileInputRef = useRef(null);
     const receiverRef = useRef(null);
     const messageRef = useRef(null);
+
+    const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    const handleAutomation = async () => {
+        try {
+            // Step 1: Upload File to IPFS
+            setProgress((prev) => [...prev, { message: 'Uploading file to IPFS...', completed: false }]);
+            await delay(5000); // Simulate 5 seconds delay (replace with actual logic)
+            const IpfsHash = await handleUploadImg(); // Get the IPFS Hash from the upload function
+            if (!IpfsHash) {
+                toast.error('Failed to upload the file to IPFS.');
+                return;
+            }
+            setCid(IpfsHash); // Set the cid state with the IpfsHash
+            setProgress((prev) => [...prev.slice(0, -1), { message: 'File uploaded successfully.', completed: true }]);
+    
+            // Step 2: Sign CID
+            setProgress((prev) => [...prev, { message: 'Signing CID...', completed: false }]);
+            await delay(5000); // Simulate 10 seconds delay (replace with actual logic)
+    
+            // Use the IpfsHash directly here instead of `cid`
+            const signedCid = await handlegetSignature(IpfsHash);
+            setSignature(signedCid);
+            setProgress((prev) => [...prev.slice(0, -1), { message: 'CID signed successfully.', completed: true }]);
+    
+            // Step 3: Default Receiver Details
+            const receiver = receiverRef.current?.value || '0x21fF6FcC89e8ed65318059527d390FaF6aC5830a';
+            const message = messageRef.current?.value || 'Default certificate message';
+    
+            // Step 4: Save to Blockchain
+            setProgress((prev) => [...prev, { message: 'Saving data to blockchain...', completed: false }]);
+            await delay(5000); // Simulate 10 seconds delay (replace with actual logic)
+            await handlesaveData({ cidd: IpfsHash, signature: signedCid, receiver, message }); // Use IpfsHash here
+            setProgress((prev) => [...prev.slice(0, -1), { message: 'Data saved successfully.', completed: true }]);
+    
+            toast.success('Document issued successfully!');
+        } catch (error) {
+            console.error('Automation failed:', error);
+            toast.error('An error occurred during the process.');
+        }
+    };
+    
 
     const handleCopyToClipboard = () => {
         navigator.clipboard.writeText(signature)
@@ -83,13 +130,14 @@ function Issuer() {
         }
     };
 
-  
+
+
     const handleUploadImg = async () => {
         console.log('Upload image called');
-
+    
         const formData = new FormData();
         const file = fileInputRef.current?.files[0]; // Access the file using the ref
-
+    
         console.log('File is: ', file);
         if (!file) {
             console.log('No file uploaded');
@@ -105,10 +153,10 @@ function Issuer() {
             });
             return;
         }
-
+    
         formData.append('file', file);
         console.log(formData);
-
+    
         console.log('New Pinata IPFS added');
         toast('Uploading...please wait', {
             position: 'top-right',
@@ -120,7 +168,7 @@ function Issuer() {
             progress: undefined,
             theme: 'light',
         });
-
+    
         try {
             const response = await axios.post(
                 'https://api.pinata.cloud/pinning/pinFileToIPFS',
@@ -134,18 +182,28 @@ function Issuer() {
                 }
             );
             console.log('IPFS hash generated!');
-            console.log(response.data.IpfsHash);
-            setCid(response.data.IpfsHash);
-            console.log('Content added with CID:', cid);
+            console.log('Response:', response.data); // Check the full response data
+            const ipfsHash = response.data.IpfsHash;
+            ipfsHashGlobal = ipfsHash;
+            console.log("hello ", ipfsHashGlobal);
+            
+            if (ipfsHash) {
+                return ipfsHash; // Return the IPFS hash
+            }
+    
+            console.log('IPFS Hash not found in response');
         } catch (error) {
-            console.log(error);
+            console.error('Error uploading file to IPFS:', error);
         }
     };
+    
+    
 
 
     const handlegetSignature = async () => {
-        if (!cid) {
-            console.log('cid is', cid)
+       
+        if (! ipfsHashGlobal ) {
+            console.log('cid is',  ipfsHashGlobal )
             console.log('toastify error')
             toast.error('please upload the certificate to IPFS first!', {
                 position: 'top-right',
@@ -159,7 +217,7 @@ function Issuer() {
             })
             return
         }
-        const packedMessage = ethers.utils.solidityPack(['string'], [cid])
+        const packedMessage = ethers.utils.solidityPack(['string'], [ipfsHashGlobal])
         console.log('packed msg: ', packedMessage)
         const hash = ethers.utils.keccak256(packedMessage)
 
@@ -168,6 +226,7 @@ function Issuer() {
             params: [account, hash],
         })
         console.log('signature:', res)
+        signglobal= res;
         setSignature(res)
     }
 
@@ -203,8 +262,11 @@ function Issuer() {
     
 
     const handlesaveData = async () => {
-        const receiver = receiverRef.current?.value; 
-        const message = messageRef.current?.value;   
+        const receiver = receiverRef.current?.value || '0x21fF6FcC89e8ed65318059527d390FaF6aC5830a';
+        const message = messageRef.current?.value || 'Default certificate message';
+    
+        // Hardcoded CID for testing
+
     
         if (!receiver || !message) {
             toast.error('Receiver and message are required!', {
@@ -220,9 +282,25 @@ function Issuer() {
             return;
         }
     
-        console.log(receiver, message, cid);
-        console.log(signature);
-        console.log(account);
+        // Ensure cid and signature are valid
+        if (!ipfsHashGlobal || !signglobal) {
+            toast.error('CID or signature is invalid!', {
+                position: "top-right",
+                autoClose: 3000,
+                hideProgressBar: false,
+                closeOnClick: true,
+                pauseOnHover: true,
+                draggable: true,
+                progress: undefined,
+                theme: "light",
+            });
+            return;
+        }
+    
+        console.log('Receiver:', receiver);
+        console.log('Message:', message);
+        console.log('CID:',ipfsHashGlobal);
+        console.log('Signature:', signglobal);
     
         // Notify the user about the blockchain transaction
         toast.info('Transaction submitted to the blockchain!', {
@@ -241,8 +319,8 @@ function Issuer() {
             const saved = await state.contract.storeSignature(
                 account,
                 receiver,
-                cid.toString(),
-                signature,
+                String(ipfsHashGlobal), // Ensure cid is a string
+                signglobal,
                 message
             );
             await saved.wait();
@@ -263,7 +341,7 @@ function Issuer() {
     
             // POST data to the database
             console.log('Saving data to the database...');
-            const response = await fetch("http://localhost:5000/issuer/saveData", {
+            const response = await fetch("https://backendpramanik.onrender.com/issuer/saveData", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -271,8 +349,8 @@ function Issuer() {
                 body: JSON.stringify({
                     account,
                     receiver,
-                    cid: cid.toString(),
-                    signature,
+                    cid: String(ipfsHashGlobal), // Ensure cid is a string
+                    signature:signglobal,
                     message,
                 }),
             });
@@ -311,6 +389,7 @@ function Issuer() {
             });
         }
     };
+    
     
 
     const handlesetSenderData = async () => {
@@ -356,221 +435,72 @@ function Issuer() {
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', boxShadow: 1, p: 2 }}>
                 <Typography variant="h6" sx={{ ml: 2, fontWeight: 'bold', color: 'text.primary' }}>ISSUE DOCUMENT</Typography>
                 <Button
-                onClick={handleconnectWallet}
-                variant="contained"
-                color="primary"
-                sx={{
-                    m: 2,
-                    px: 4,
-                    py: 2,
-                    borderRadius: 1,
-                    '&:hover': { backgroundColor: 'primary.dark' },
-                }}
-            >
-                {connected ? 'Wallet Connected' : 'Connect Wallet'}
-            </Button>
+                    onClick={handleconnectWallet}
+                    variant="contained"
+                    color="primary"
+                    sx={{
+                        m: 2,
+                        px: 4,
+                        py: 2,
+                        borderRadius: 1,
+                        '&:hover': { backgroundColor: 'primary.dark' },
+                    }}
+                >
+                    {connected ? 'Wallet Connected' : 'Connect Wallet'}
+                </Button>
             </Box>
-
+    
             {connected ? (
-                <Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-start' }} />
-                    
-
-                    {page === 'sign' && (
-                        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', bgcolor: 'gray.50' }}>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: 600, bgcolor: 'white', borderRadius: 2, boxShadow: 3, p: 3 }}>
-                                <Typography variant="h6" sx={{ mb: 2, textAlign: 'center', fontWeight: 'bold' }}>Sign and Save Certificate</Typography>
-
-                                {/* Step 1: Upload File */}
-                                <Box sx={{ mb: 3 }}>
-                                    <Typography variant="subtitle1" sx={{ mb: 1 }}>Upload the File</Typography>
-                                    {cid ? (
-                                        <Box sx={{ p: 2, bgcolor: 'gray.100', borderRadius: 1 }}>
-                                            <Typography variant="body2"><strong>CID: </strong>{cid}</Typography>
-                                        </Box>
-                                    ) : (
-                                        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2 }}>
-                                            <TextField
-                                                     type="file"
-                                                     inputRef={fileInputRef}  // Attach ref here
-                                                     sx={{ flex: 1 }}
-                                                 />
-                                                 <Button
-                                                     onClick={handleUploadImg}
-                                                     variant="contained"
-                                                     color="primary"
-                                                     sx={{ alignSelf: 'flex-start', marginTop: 2 }}
-                                                 >
-                                                     Upload to IPFS
-                                                 </Button>
-                                        </Box>
-                                    )}
-                                </Box>
-
-                                {/* Step 2: Sign the CID */}
-                                <Box sx={{ mb: 3 }}>
-                                    <Typography variant="subtitle1" sx={{ mb: 1 }}>Sign the CID (Issuing Authority Signature)</Typography>
-                                    {signature ? (
-                                        <Box sx={{ display: 'flex', alignItems: 'center', p: 2, bgcolor: 'gray.100', borderRadius: 1 }}>
-                                            <Typography variant="body2" sx={{ wordBreak: 'break-word', flex: 1 }}>
-                                                {signature.slice(0, 20)}...
-                                            </Typography>
-                                            <Box
-                                             onClick={handleCopyToClipboard}
-                                                sx={{ cursor: 'pointer', color: 'primary.main' }}
-                                                     >
-                                                <AiOutlineCopy size={20} />
-                                            </Box>
-                                        </Box>
-                                    ) : (
-                                        <Button
-                                            onClick={handlegetSignature}
-                                            variant="contained"
-                                            color="primary"
-                                            fullWidth
-                                        >
-                                            Sign the CID
-                                        </Button>
-                                    )}
-                                </Box>
-
-                                {/* Step 3: Enter Details */}
-                                <Box sx={{ mb: 3 }}>
-                                    <Typography variant="subtitle1" sx={{ mb: 1 }}>Enter Receiver and Certificate Details</Typography>
-                                    <input
-    label="Receiver Address"
-    variant="outlined"
-    id="receiver"
-    ref={receiverRef}
-    required
-    fullWidth
-    margin="normal"
-/>
-<input
-    label="Message"
-    variant="outlined"
-    id="message"
-    ref={messageRef}
-    required
-    fullWidth
-    margin="normal"
-/>
-                                </Box>
-
-                                {/* Step 4: Save to Blockchain */}
-                                <Box>
-                                    <Typography variant="subtitle1" sx={{ mb: 1 }}>Issue Document:</Typography>
-                                    {signature && (
-                                           <Button
-                                           onClick={handlesaveData}
-                                           variant="contained"
-                                           color="success"
-                                           fullWidth
-                                       >
-                                           Save
-                                       </Button>
-                                    )}
-                                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', bgcolor: 'gray.50' }}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: 600, bgcolor: 'white', borderRadius: 2, boxShadow: 3, p: 3 }}>
+                        <Typography variant="h6" sx={{ mb: 2, textAlign: 'center', fontWeight: 'bold' }}>Upload and Issue Document</Typography>
+    
+                        {/* Step 1: Upload File */}
+                        <Box sx={{ mb: 3 }}>
+                            <Typography variant="subtitle1" sx={{ mb: 1 }}>Upload File</Typography>
+                            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2 }}>
+                                <TextField
+                                    type="file"
+                                    inputRef={fileInputRef} // Attach ref
+                                    sx={{ flex: 1 }}
+                                />
+                                   <TextField
+                                    type="text"
+                                    messageRef={receiverRef} // Attach ref
+                                    sx={{ flex: 1 }}
+                                />
+                                <Button
+                                    onClick={handleAutomation}
+                                    variant="contained"
+                                    color="primary"
+                                    sx={{ alignSelf: 'flex-start', marginTop: 2 }}
+                                >
+                                    Upload & Issue
+                                </Button>
                             </Box>
                         </Box>
-                    )}
-
-                    {page === 'verify' && (
-                        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', bgcolor: 'gray.50' }}>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: 600, bgcolor: 'white', borderRadius: 2, boxShadow: 3, p: 3 }}>
-                                <Typography variant="h6" sx={{ mb: 2, textAlign: 'center', fontWeight: 'bold' }}>Verify Signature</Typography>
-
-                                {/* CID Input */}
-                                <Box sx={{ mb: 3 }}>
-                                    <Typography variant="subtitle1" sx={{ mb: 1 }}>Enter CID</Typography>
-                                    <TextField
-                                        fullWidth
-                                        variant="outlined"
-                                        label="Signed message"
-                                    />
-                                </Box>
-
-                                {/* Signature Input */}
-                                <Box sx={{ mb: 3 }}>
-                                    <Typography variant="subtitle1" sx={{ mb: 1 }}>Enter Signature</Typography>
-                                    <TextField
-                                        fullWidth
-                                        variant="outlined"
-                                        label="Signature"
-                                    />
-                                </Box>
-
-                                {/* Signer Address Input */}
-                                {showSignerInput && (
-                                    <Box sx={{ mb: 3 }}>
-                                        <Typography variant="subtitle1" sx={{ mb: 1 }}>Enter Signer Address</Typography>
-                                        <TextField
-                                            fullWidth
-                                            variant="outlined"
-                                            label="Signing authority"
-                                        />
-                                    </Box>
-                                )}
-
-                                {/* Action Buttons */}
-                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                    {!showSignerInput ? (
-                                        <Button
-                                            onClick={handlegetSignerAddress}
-                                            variant="contained"
-                                            color="primary"
-                                            fullWidth
-                                            sx={{ mb: 2 }}
-                                        >
-                                            Get the Signer Address
-                                        </Button>
-                                    ) : (
-                                        <Button
-                                            onClick={handlecheckValidity}
-                                            variant="contained"
-                                            color="success"
-                                            fullWidth
-                                            sx={{ mb: 2 }}
-                                        >
-                                            Confirm Address Validity
-                                        </Button>
-                                    )}
-                                    <Typography id="valid" sx={{ fontSize: 18, fontWeight: 'medium', color: 'text.secondary' }} />
-                                </Box>
-
-                                {/* Toggle Option */}
-                                <Box sx={{ textAlign: 'center' }}>
-                                    {!showSignerInput ? (
-                                        <Typography
-                                            variant="body2"
-                                            sx={{ color: 'primary.main', cursor: 'pointer' }}
-                                            onClick={() => setShowSignerInput(true)}
-                                        >
-                                            Already have the signer address? Try this
-                                        </Typography>
-                                    ) : (
-                                        <Typography
-                                            variant="body2"
-                                            sx={{ color: 'primary.main', cursor: 'pointer' }}
-                                            onClick={() => setShowSignerInput(false)}
-                                        >
-                                            Want to provide the CID? Try this
-                                        </Typography>
-                                    )}
-                                </Box>
-                            </Box>
+    
+                        {/* Step Progress */}
+                        <Box sx={{ mt: 2 }}>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>Progress:</Typography>
+                            {progress.map((step, index) => (
+                                <Typography key={index} variant="body2" sx={{ color: step.completed ? 'success.main' : 'text.secondary' }}>
+                                    {index + 1}. {step.message}
+                                </Typography>
+                            ))}
                         </Box>
-                    )}
+                    </Box>
                 </Box>
             ) : (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
                     <Typography variant="h6">Connect your wallet to continue</Typography>
                 </Box>
             )}
-
+    
             <ToastContainer position="top-right" />
         </Box>
-    )
+    );
+    
 
       
 }

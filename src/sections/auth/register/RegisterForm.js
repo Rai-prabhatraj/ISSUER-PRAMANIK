@@ -47,7 +47,7 @@ export default function RegisterForm() {
   const onSubmit = async (data) => {
     try {
       // Call the signup API
-      const response = await axios.post('http://localhost:5000/user/signup', {
+      const response = await axios.post('https://backendpramanik.onrender.com/user/signup', {
         name: `${data.firstName} ${data.lastName}`,
         email: data.email,
         password: data.password,
