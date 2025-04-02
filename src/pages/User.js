@@ -1,6 +1,4 @@
 import { useState, useEffect } from 'react';
-
-
 import axios from 'axios';
 import { Link as RouterLink } from 'react-router-dom';
 // material
@@ -19,7 +17,7 @@ import {
   TableContainer,
   TablePagination,
   Menu, 
-  MenuItem ,
+  MenuItem,
   Select,
   FormControl
 } from '@mui/material';
@@ -53,9 +51,8 @@ export default function User() {
   const [requestList, setRequestList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [anchorEl, setAnchorEl] = useState(null);
-  const [selectedCid, setSelectedCid] = useState(null);
+  const [selectedRowCid, setSelectedRowCid] = useState(null);
   const [tableData, setTableData] = useState();
-
 
   // Fetch data from backend
   useEffect(() => {
@@ -63,7 +60,7 @@ export default function User() {
       try {
         const response = await axios.get('https://backendpramanik.onrender.com/issuer/getalldocuments'); // Replace with your API endpoint
         setRequestList(response.data);
-        console.log(response.data)
+        console.log(response.data);
         setIsLoading(false);
       } catch (error) {
         console.error('Error fetching requests:', error);
@@ -73,7 +70,6 @@ export default function User() {
 
     fetchRequests();
   }, []);
-
 
   const handleRequestSort = (event, property) => {
     const isAsc = orderBy === property && order === 'asc';
@@ -94,7 +90,6 @@ export default function User() {
     }
   };
   
-
   const handleSelectAllClick = (event) => {
     if (event.target.checked) {
       const newSelecteds = requestList.map((n) => n.doctype);
@@ -132,8 +127,9 @@ export default function User() {
     setFilterName(event.target.value);
   };
 
-  const handleOpenMenu = (event) => {
+  const handleOpenMenu = (event, cid) => {
     setAnchorEl(event.currentTarget);
+    setSelectedRowCid(cid);
   };
 
   const handleCloseMenu = () => {
@@ -168,9 +164,6 @@ export default function User() {
       console.error('Error updating status:', error);
     }
   };
-  
-
-
 
   const filteredRequests = requestList.filter((request) =>
     request.doctype.toLowerCase().includes(filterName.toLowerCase())
@@ -184,9 +177,9 @@ export default function User() {
     return <Typography>Loading...</Typography>;
   }
 
-  const cidString = requestList[2].cid;
-  const cidArray = cidString.split(",");
-  console.log(cidArray)
+  // Remove the problematic line
+  // const cidString = requestList[2].cid;
+  // const cidArray = cidString.split(",");
 
   return (
     <Page title="Requests">
@@ -220,6 +213,9 @@ export default function User() {
                     const { _id, doctype, issuingAuthority, message, cid, receiver, status } = row;
                     const isItemSelected = selected.indexOf(doctype) !== -1;
 
+                    // Safely process the CID if it exists
+                    const cidArray = cid ? cid.split(',') : [];
+
                     return (
                       <TableRow
                         hover
@@ -242,80 +238,55 @@ export default function User() {
                         <TableCell align="left">{issuingAuthority}</TableCell>
                         <TableCell align="left">{message}</TableCell>
                         <TableCell align="left">
-                        <Button
-        variant="outlined"
-        onClick={handleOpenMenu}
-      >
-        View Documents
-      </Button>
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleCloseMenu}
-      >
-        {cidArray.map((cidItem, index) => (
-          <MenuItem key={index} onClick={() => handleViewDocument(cidItem)}>
-            {cidItem.trim()}
-          </MenuItem>
-        ))}
-      </Menu>
-
-
-{/* <Menu
-  anchorEl={anchorEl}
-  open={Boolean(anchorEl)}
-  onClose={handleCloseMenu}
->
-  {requestList.map((item, index) => 
-    item.cid ? (
-      item.cid.split(',').map((cidItem, cidIndex) => (
-        <MenuItem key={cidIndex} onClick={() => handleViewDocument(cidItem.trim())}>
-          {cidItem.trim()}
-        </MenuItem>
-      ))
-    ) : (
-      <MenuItem key={`${index}-no-cid`} disabled>
-        No CID available
-      </MenuItem>
-    )
-  )}
-</Menu> */}
-
-
-
+                          <Button
+                            variant="outlined"
+                            onClick={(event) => handleOpenMenu(event, cid)}
+                            disabled={!cid || cidArray.length === 0}
+                          >
+                            View Documents
+                          </Button>
+                          <Menu
+                            anchorEl={anchorEl}
+                            open={Boolean(anchorEl)}
+                            onClose={handleCloseMenu}
+                          >
+                            {selectedRowCid && selectedRowCid.split(',').map((cidItem, index) => (
+                              <MenuItem key={index} onClick={() => handleViewDocument(cidItem)}>
+                                {cidItem.trim()}
+                              </MenuItem>
+                            ))}
+                          </Menu>
                         </TableCell>
                         <TableCell align="left">{receiver}</TableCell>
                         <TableCell align="left">
-  <FormControl variant="outlined" size="small">
-    <Select
-      value={status}
-      onChange={(event) => handleStatusChange(_id, event.target.value)}
-      sx={{
-        minWidth: 120,
-        backgroundColor: getStatusColor(status),
-        color: 'white',
-        '& .MuiSvgIcon-root': {
-          color: 'white', // Icon color
-        },
-        '&:hover': {
-          backgroundColor: getStatusColor(status),
-        },
-      }}
-    >
-      <MenuItem value="Pending" sx={{ color: 'orange' }}>
-        Pending
-      </MenuItem>
-      <MenuItem value="Complete" sx={{ color: 'green' }}>
-        Complete
-      </MenuItem>
-      <MenuItem value="Rejected" sx={{ color: 'red' }}>
-        Rejected
-      </MenuItem>
-    </Select>
-  </FormControl>
-</TableCell>
-
-
+                          <FormControl variant="outlined" size="small">
+                            <Select
+                              value={status}
+                              onChange={(event) => handleStatusChange(_id, event.target.value)}
+                              sx={{
+                                minWidth: 120,
+                                backgroundColor: getStatusColor(status),
+                                color: 'white',
+                                '& .MuiSvgIcon-root': {
+                                  color: 'white', // Icon color
+                                },
+                                '&:hover': {
+                                  backgroundColor: getStatusColor(status),
+                                },
+                              }}
+                            >
+                              <MenuItem value="Pending" sx={{ color: 'orange' }}>
+                                Pending
+                              </MenuItem>
+                              <MenuItem value="Complete" sx={{ color: 'green' }}>
+                                Complete
+                              </MenuItem>
+                              <MenuItem value="Rejected" sx={{ color: 'red' }}>
+                                Rejected
+                              </MenuItem>
+                            </Select>
+                          </FormControl>
+                        </TableCell>
                         <TableCell align="right">
                           <UserMoreMenu />
                         </TableCell>

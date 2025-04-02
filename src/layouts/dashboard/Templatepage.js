@@ -1,38 +1,94 @@
 import React, { useState } from 'react';
-import { Button, Typography, Box, Modal } from '@mui/material';
+import { 
+  Button, 
+  Typography, 
+  Box, 
+  Modal, 
+  Paper, 
+  Container, 
+  Grid, 
+  Stepper, 
+  Step, 
+  StepLabel, 
+  Card, 
+  CardContent, 
+  CircularProgress,
+  Chip,
+  Divider,
+  IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Alert
+} from '@mui/material';
+import { styled } from '@mui/material/styles';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import DescriptionIcon from '@mui/icons-material/Description';
+import PublishIcon from '@mui/icons-material/Publish';
+import PreviewIcon from '@mui/icons-material/Preview';
+import CloseIcon from '@mui/icons-material/Close';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import axios from 'axios';
+
+const VisuallyHiddenInput = styled('input')({
+  clip: 'rect(0 0 0 0)',
+  clipPath: 'inset(50%)',
+  height: 1,
+  overflow: 'hidden',
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  whiteSpace: 'nowrap',
+  width: 1,
+});
 
 function GeneratePdfPage() {
   const [excelData, setExcelData] = useState([]);
   const [isPublishing, setIsPublishing] = useState(false);
   const [previewPdfUrl, setPreviewPdfUrl] = useState(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [activeStep, setActiveStep] = useState(0);
+  const [fileName, setFileName] = useState('');
+  const [uploadError, setUploadError] = useState('');
+
+  const steps = ['Upload Excel File', 'Review Data', 'Generate Document'];
 
   // Handle file upload
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
+    setUploadError('');
+    
     if (file) {
+      setFileName(file.name);
       const reader = new FileReader();
       reader.onload = (e) => {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
 
-        // Get the first sheet and convert it to JSON
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        let jsonData = XLSX.utils.sheet_to_json(worksheet);
+          // Get the first sheet and convert it to JSON
+          const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+          let jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-        // Clean the keys in the JSON data
-        jsonData = jsonData.map((row) =>
-          Object.keys(row).reduce((acc, key) => {
-            const cleanedKey = key.trim().replace(/\s+/g, ' '); // Remove extra spaces
-            acc[cleanedKey] = row[key];
-            return acc;
-          }, {})
-        );
+          // Clean the keys in the JSON data
+          jsonData = jsonData.map((row) =>
+            Object.keys(row).reduce((acc, key) => {
+              const cleanedKey = key.trim().replace(/\s+/g, ' '); // Remove extra spaces
+              acc[cleanedKey] = row[key];
+              return acc;
+            }, {})
+          );
 
-        setExcelData(jsonData);
+          setExcelData(jsonData);
+          setActiveStep(1); // Move to review step
+        } catch (error) {
+          console.error("Error processing file:", error);
+          setUploadError('Failed to process the Excel file. Please check the format and try again.');
+        }
       };
       reader.readAsArrayBuffer(file);
     }
@@ -41,7 +97,7 @@ function GeneratePdfPage() {
   // Generate PDF and preview it
   const handleReviewPdf = () => {
     if (excelData.length === 0) {
-      alert('No data to review!');
+      setUploadError('No data to review!');
       return;
     }
 
@@ -56,7 +112,7 @@ function GeneratePdfPage() {
         Timestamp: ${item.Timestamp || ''}
         ERP ID: ${item['ERP ID'] || ''}
         Email ID: ${item['Email ID'] || ''}
-        Name: ${item['Name'] || ''}
+        Name: ${item.Name || ''}
         Application Status: ${item['Application Status'] || ''}
         Institute Name: ${item['Institute Name'] || ''}
         Highest Qualification: ${item['Highest Qualification'] || ''}
@@ -80,12 +136,13 @@ function GeneratePdfPage() {
     const pdfUrl = URL.createObjectURL(pdfBlob);
     setPreviewPdfUrl(pdfUrl);
     setIsReviewModalOpen(true);
+    setActiveStep(2); // Move to final step
   };
 
   // Generate and upload PDF
   const generateAndUploadPdf = async () => {
     if (excelData.length === 0) {
-      alert('No data to publish!');
+      setUploadError('No data to publish!');
       return;
     }
 
@@ -103,7 +160,7 @@ function GeneratePdfPage() {
         Timestamp: ${item.Timestamp || ''}
         ERP ID: ${item['ERP ID'] || ''}
         Email ID: ${item['Email ID'] || ''}
-        Name: ${item['Name'] || ''}
+        Name: ${item.Name || ''}
         Application Status: ${item['Application Status'] || ''}
         Institute Name: ${item['Institute Name'] || ''}
         Highest Qualification: ${item['Highest Qualification'] || ''}
@@ -138,118 +195,235 @@ function GeneratePdfPage() {
         },
       });
 
-      alert(`PDF successfully published to IPFS! CID: ${response.data.IpfsHash}`);
+      setUploadError(`PDF successfully published to IPFS! CID: ${response.data.IpfsHash}`);
     } catch (error) {
       console.error('Error uploading to Pinata:', error);
-      alert('Failed to publish PDF to IPFS.');
+      setUploadError('Failed to publish PDF to IPFS.');
     } finally {
       setIsPublishing(false);
     }
   };
 
   return (
-    <div style={{ padding: '20px' }}>
-      <Typography variant="h4" gutterBottom>
-        Generate Document and Publish
-      </Typography>
-
-      <Box>
-        <input
-          type="file"
-          accept=".xlsx, .xls"
-          onChange={handleFileUpload}
-          style={{ marginBottom: '20px' }}
-        />
-      </Box>
-
-      {excelData.length > 0 && (
-        <div>
-          <Typography variant="h6" gutterBottom>
-            Uploaded Data:
-          </Typography>
-          <table border="1" cellPadding="5" style={{ width: '100%', marginBottom: '20px' }}>
-            <thead>
-              <tr>
-                <th>Timestamp</th>
-                <th>Email</th>
-                <th>Name</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {excelData.map((item, index) => (
-                <tr key={index}>
-                  <td>{item.Timestamp}</td>
-                  <td>{item['Email ID']}</td>
-                  <td>{item['Name']}</td>
-                  <td>{item['Application Status']}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <Button
-            variant="contained"
-            color="secondary"
-            onClick={handleReviewPdf}
-            style={{ marginRight: '10px' }}
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Paper elevation={3} sx={{ p: 4, borderRadius: 2 }}>
+        <Typography variant="h4" gutterBottom sx={{ mb: 3, color: '#1976d2', fontWeight: 'bold' }}>
+          <DescriptionIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Document Generator
+        </Typography>
+        
+        <Divider sx={{ mb: 4 }} />
+        
+        <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 4 }}>
+          {steps.map((label) => (
+            <Step key={label}>
+              <StepLabel>{label}</StepLabel>
+            </Step>
+          ))}
+        </Stepper>
+        
+        {uploadError && (
+          <Alert 
+            severity={uploadError.includes('successfully') ? "success" : "error"} 
+            sx={{ mb: 3 }}
+            onClose={() => setUploadError('')}
           >
-            Review Document
-          </Button>
-
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={generateAndUploadPdf}
-            disabled={isPublishing}
-          >
-            {isPublishing ? 'Publishing...' : 'Publish to IPFS'}
-          </Button>
-        </div>
-      )}
+            {uploadError}
+          </Alert>
+        )}
+        
+        <Box sx={{ mb: 4 }}>
+          {activeStep === 0 && (
+            <Card variant="outlined" sx={{ 
+              p: 3, 
+              textAlign: 'center',
+              background: 'linear-gradient(to bottom, #f9f9f9, #f0f0f0)',
+              border: '2px dashed #ccc',
+              borderRadius: 2
+            }}>
+              <CardContent>
+                <CloudUploadIcon sx={{ fontSize: 60, color: '#1976d2', mb: 2 }} />
+                <Typography variant="h6" gutterBottom>
+                  Upload Excel File
+                </Typography>
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+                  Please upload an Excel file
+                </Typography>
+                
+                <Button
+                  component="label"
+                  variant="contained"
+                  startIcon={<CloudUploadIcon />}
+                  sx={{ mt: 2 }}
+                >
+                  Select File
+                  <VisuallyHiddenInput 
+                    type="file" 
+                    accept=".xlsx, .xls" 
+                    onChange={handleFileUpload}
+                  />
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+          
+          {activeStep >= 1 && excelData.length > 0 && (
+            <Box>
+              <Grid container spacing={2} alignItems="center" sx={{ mb: 3 }}>
+                <Grid item>
+                  <Chip 
+                    icon={<DescriptionIcon />} 
+                    label={fileName || "Excel Data"} 
+                    variant="outlined" 
+                    color="primary" 
+                  />
+                </Grid>
+                <Grid item>
+                  <Typography variant="body2" color="textSecondary">
+                    {excelData.length} records loaded
+                  </Typography>
+                </Grid>
+              </Grid>
+              
+              <Typography variant="h6" gutterBottom sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
+                Application Data Preview:
+              </Typography>
+              
+              <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
+                <Table size="small">
+                  <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Timestamp</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Email</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {excelData.slice(0, 5).map((item, index) => (
+                      <TableRow key={index} sx={{ '&:nth-of-type(odd)': { backgroundColor: '#fafafa' } }}>
+                        <TableCell>{item.Timestamp}</TableCell>
+                        <TableCell>{item['Email ID']}</TableCell>
+                        <TableCell>{item.Name}</TableCell>
+                        <TableCell>
+                          <Chip 
+                            label={item['Application Status'] || 'N/A'} 
+                            size="small"
+                            color={item['Application Status'] === 'Accepted' ? 'success' : 
+                                  item['Application Status'] === 'Rejected' ? 'error' : 'default'}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {excelData.length > 5 && (
+                  <Box sx={{ p: 1, textAlign: 'center' }}>
+                    <Typography variant="body2" color="textSecondary">
+                      Showing 5 of {excelData.length} records
+                    </Typography>
+                  </Box>
+                )}
+              </TableContainer>
+            </Box>
+          )}
+          
+          {activeStep >= 1 && (
+            <Grid container spacing={2} justifyContent="center">
+              <Grid item>
+                <Button
+                  variant="outlined"
+                  color="secondary"
+                  onClick={handleReviewPdf}
+                  startIcon={<PreviewIcon />}
+                  disabled={excelData.length === 0}
+                >
+                  Preview Document
+                </Button>
+              </Grid>
+              <Grid item>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={generateAndUploadPdf}
+                  disabled={isPublishing || excelData.length === 0}
+                  startIcon={isPublishing ? <CircularProgress size={20} color="inherit" /> : <PublishIcon />}
+                >
+                  {isPublishing ? 'Publishing...' : 'Publish to IPFS'}
+                </Button>
+              </Grid>
+            </Grid>
+          )}
+        </Box>
+      </Paper>
 
       {/* Review Modal */}
       <Modal
         open={isReviewModalOpen}
         onClose={() => setIsReviewModalOpen(false)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
+        aria-labelledby="document-preview-modal"
       >
-        <Box
-          style={{
-            backgroundColor: 'white',
-            padding: '20px',
-            maxWidth: '80%',
-            maxHeight: '80%',
-            overflow: 'auto',
+        <Paper
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '80%',
+            maxHeight: '80vh',
+            p: 4,
+            outline: 'none',
+            borderRadius: 2,
+            boxShadow: 24,
           }}
         >
-          <Typography variant="h5" gutterBottom>
-            Document Preview
-          </Typography>
-          {previewPdfUrl && (
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h5" id="document-preview-modal">
+              <PreviewIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+              Document Preview
+            </Typography>
+            <IconButton onClick={() => setIsReviewModalOpen(false)} size="small">
+              <CloseIcon />
+            </IconButton>
+          </Box>
+          
+          <Divider sx={{ mb: 2 }} />
+          
+          {previewPdfUrl ? (
             <iframe
               src={previewPdfUrl}
               title="PDF Preview"
               width="100%"
-              height="400px"
+              height="500px"
               style={{ border: 'none' }}
             />
+          ) : (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+              <CircularProgress />
+            </Box>
           )}
-          <Button
-            variant="contained"
-            color="secondary"
-            onClick={() => setIsReviewModalOpen(false)}
-            style={{ marginTop: '10px' }}
-          >
-            Close
-          </Button>
-        </Box>
+          
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
+            <Button 
+              variant="outlined" 
+              color="secondary" 
+              onClick={() => setIsReviewModalOpen(false)}
+            >
+              Close
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={generateAndUploadPdf}
+              disabled={isPublishing}
+              startIcon={isPublishing ? <CircularProgress size={20} color="inherit" /> : <PublishIcon />}
+            >
+              {isPublishing ? 'Publishing...' : 'Publish to IPFS'}
+            </Button>
+          </Box>
+        </Paper>
       </Modal>
-    </div>
+    </Container>
   );
 }
 

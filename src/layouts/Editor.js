@@ -9,8 +9,6 @@ const CanvaEditor = () => {
   const [color, setColor] = useState("#000");
   const [fontSize, setFontSize] = useState(20);
 
-  
-
   const addRectangle = () => {
     setShapes([
       ...shapes,
@@ -135,7 +133,7 @@ const CanvaEditor = () => {
                 height={shape.height}
                 fill={shape.fill}
                 draggable
-                onDragEnd={(e) => onDragEnd(e, shape.id)}
+                onDragEnd={(e) => handleDragEnd(e, shape.id)}
               />
             );
           case "text":
@@ -148,7 +146,7 @@ const CanvaEditor = () => {
                 fill={shape.fill}
                 fontSize={shape.fontSize}
                 draggable
-                onDragEnd={(e) => onDragEnd(e, shape.id)}
+                onDragEnd={(e) => handleDragEnd(e, shape.id)}
               />
             );
           default:
